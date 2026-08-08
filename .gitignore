@@ -1,0 +1,5 @@
+livespice_cli/bin/
+livespice_cli/obj/
+publish/
+*.user
+.DS_Store
