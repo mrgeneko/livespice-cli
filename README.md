@@ -15,8 +15,9 @@ livespice_cli \
 `--jobs N` renders multiple parameter permutations in one process, amortizing schematic-parse
 and assembly-load cost across N runs — useful for batch dataset generation.
 
-**`--params` matching is case-SENSITIVE, and an unmatched name is SILENTLY IGNORED.** `Vol` is
-not `vol`; passing the latter gets you the default control value and no warning.
+**`--params` matching is case-SENSITIVE, and an unmatched name is a HARD ERROR.** `Vol` is not
+`vol`; passing the latter fails fast, listing the circuit's real pot/switch names, rather than
+silently rendering at defaults (which would make every "swept" permutation identical).
 
 ## Why this exists
 
