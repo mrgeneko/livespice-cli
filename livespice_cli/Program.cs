@@ -16,11 +16,13 @@ namespace livespice_cli
             string inputPath = null, outputPath = null, circuitPath = null, paramsStr = null, speakerName = null;
             string netlistPath = null, jobsPath = null;
             int sampleRate = 48000, oversample = 2, iterations = 8;
+            bool progress = false;
 
             for (int i = 0; i < args.Length; i++)
             {
                 switch (args[i])
                 {
+                    case "--progress": progress = true; break;
                     case "--input": inputPath = args[++i]; break;
                     case "--output": outputPath = args[++i]; break;
                     case "--circuit": circuitPath = args[++i]; break;
@@ -46,6 +48,8 @@ namespace livespice_cli
                 (netlistPath == null && jobsPath == null && (inputPath == null || outputPath == null)))
             {
                 Console.Error.WriteLine("Usage: livespice_cli --input in.wav --output out.wav --circuit circuit.schx [--params k=v,...] [--speaker S1] [--sr 48000] [--oversample 2] [--iterations 8]");
+                Console.Error.WriteLine("       [--progress]  emit 'PROGRESS done/total' to stderr while rendering, so a caller can");
+                Console.Error.WriteLine("                     detect a STALL (no progress for N s) instead of guessing a total timeout");
                 Console.Error.WriteLine("   or: livespice_cli --circuit circuit.schx --netlist out.json   (dump netlist and exit)");
                 Console.Error.WriteLine("   or: livespice_cli --circuit circuit.schx --jobs jobs.jsonl   (batch render; '-' = stdin)");
                 Console.Error.WriteLine("       each line: {\"output\": ..., \"params\": \"k=v,...\", \"input\": ..., \"oversample\": N, \"iterations\": N, \"speaker\": ...}");
@@ -129,7 +133,7 @@ namespace livespice_cli
             int outSampleRate = sampleRate > 0 ? sampleRate : inSampleRate;
 
             double[] outputBuffer = Render(circuit, outputExpr, inSamples, outSampleRate,
-                                           oversample, iterations, log);
+                                           oversample, iterations, log, progress);
 
             // write output WAV
             WriteWavFloat(outputPath, outputBuffer, outSampleRate);
@@ -264,7 +268,8 @@ namespace livespice_cli
         }
 
         static double[] Render(Circuit.Circuit circuit, Expression outputExpr, double[] inSamples,
-                               int outSampleRate, int oversample, int iterations, ConsoleLog log)
+                               int outSampleRate, int oversample, int iterations, ConsoleLog log,
+                               bool progress = false)
         {
             // find input component
             var inputExpr = circuit.Components
@@ -292,6 +297,18 @@ namespace livespice_cli
             double[] outputBuffer = new double[N];
             int chunk = 4096;
             int offset = 0;
+            // PROGRESS HEARTBEAT. A caller cannot tell a slow render from a hung one without it,
+            // so it has to guess a total wall-clock timeout -- and that guess has to be re-derived
+            // for every circuit, oversample and retry rung. It gets the guess wrong in BOTH
+            // directions: a legitimately slow operating point is killed (the Dual Rectifier's
+            // Master=1.0 corner needs far more than the 10x-realtime budget its oversample
+            // implies), while a genuinely hung render still burns the whole budget before dying.
+            // Reporting progress lets the caller watch for a STALL instead, which needs no
+            // knowledge of how long the render *should* take.
+            // Throttled to ~1 line/second of wall time: at 4096-sample chunks a 120 s render is
+            // ~1400 chunks, and one line each would be noise.
+            var swProg = System.Diagnostics.Stopwatch.StartNew();
+            long lastMs = -1000;
             while (offset < N)
             {
                 int n = Math.Min(chunk, N - offset);
@@ -301,6 +318,12 @@ namespace livespice_cli
                 sim.Run(chunkIn, chunkOut);
                 Array.Copy(chunkOut, 0, outputBuffer, offset, n);
                 offset += n;
+                if (progress && (swProg.ElapsedMilliseconds - lastMs >= 1000 || offset >= N))
+                {
+                    lastMs = swProg.ElapsedMilliseconds;
+                    Console.Error.WriteLine($"PROGRESS {offset}/{N}");
+                    Console.Error.Flush();
+                }
             }
             return outputBuffer;
         }
