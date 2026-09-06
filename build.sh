@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
-# Build livespice_cli against PRISTINE LiveSPICE (extern/LiveSPICE).
-# See README.md — never patch the submodule in place.
+# Build livespice_cli against extern/LiveSPICE.
+# The submodule carries ONE cherry-picked upstream commit (5398a63, Capacitor.cs) on branch
+# capacitor-current-unknown — see 'Divergence from upstream' in README.md. Apart from that it
+# is upstream master. Do not patch it in place beyond that; add commits to the fork instead.
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
