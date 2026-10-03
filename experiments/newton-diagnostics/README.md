@@ -7,19 +7,19 @@ rescue solves that are not converging. Measured on `optiplex7010`, 2026-10-02/03
 
 | Feature | Default | Use |
 |---|---|---|
-| Unconverged-solve counters | always on, one stderr line per render | `newton: solves=N unconverged=M (x%) severe=K first_sample=S last_sample=L max_abs_output=V` |
+| Unconverged-solve counters | always on, one stderr line per render | `newton: solves=N unconverged=M (x%) severe=K first_sample=S last_sample=L max_abs_output=V line_search=N` |
 | `severe` | part of the line above | unconverged solves whose last step was still larger than 1 (V or A); the rest are harmless chatter at a rounding floor |
 | Magnitude check | on, 1e6 V | a finite output beyond the limit raises `SimulationDiverged` (previously only NaN/inf did) |
 | `--magnitude-limit V` | 1e6 | `0` restores the old behaviour |
 | `--trace-newton K` | off | per-iteration trajectory of the first K unconverged solves; slows the solve |
 | `--tap NET` | off | render an internal net's voltage instead of a Speaker (also `"tap"` in `--jobs` lines) |
-| `--line-search N` | off | residual-monitored backtracking for solves that are not converging, up to N halvings (8 works) |
+| `--line-search N` | 8 (on); `0` = plain Newton | residual-monitored backtracking for solves that are not converging, up to N halvings (8 works) |
 | `--line-search-after K` | 20 | plain Newton iterations before backtracking may engage |
 | `--line-search-slack X` | 0.1 | relative growth of the squared residual norm tolerated before a step is undone |
 | `--trust-region V` | off, EXPERIMENTAL | scale the whole Newton step when its norm exceeds V volts; the right V depends on the circuit |
 
-An "unconverged" solve is one whose iteration cap ran out before the step test passed. With every opt-in
-flag off, output is byte-identical to the previous build.
+An "unconverged" solve is one whose iteration cap ran out before the step test passed. Line search is on by default (`--line-search 0` restores plain Newton): output differs from the previous
+build only for circuits with solves that exceed 20 iterations.
 
 ## How the line search works
 

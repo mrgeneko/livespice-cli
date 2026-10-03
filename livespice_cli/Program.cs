@@ -14,7 +14,7 @@ namespace livespice_cli
         // Newton diagnostics options (see Simulation.Stats): parsed from the command line, applied in Render.
         static int TraceNewton = 0;
         static double TrustRegionV = 0.0;
-        static int LineSearchN = 0, LineSearchAfterN = 20;
+        static int LineSearchN = 8, LineSearchAfterN = 20; // default ON; --line-search 0 restores plain Newton
         static double LineSearchSlackX = 0.1;
         static string TapNode = null;
         static double MagnitudeLimitV = -1;   // < 0: keep the Simulation default (1e6 V); 0 disables the magnitude check
@@ -364,7 +364,7 @@ namespace livespice_cli
             finally
             {
                 // Always report Newton health, including when the render diverged.
-                Console.Error.WriteLine(sim.Stats.Summary());
+                Console.Error.WriteLine(sim.Stats.Summary() + " line_search=" + LineSearchN);
                 foreach (var line in sim.Stats.TraceLines()) Console.Error.WriteLine(line);
             }
             return outputBuffer;
