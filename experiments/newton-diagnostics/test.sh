@@ -26,3 +26,11 @@ grep -E "^newton-trace: solve" ft/tap.err | cut -c1-200
 grep -E "^newton-trace:   it=(1|2|3|4) " ft/tap.err | head -6 | cut -c1-200
 echo "== T5 --trust-region 50 on the failing Deluxe build (expect 0 unconverged, peak 28.66)"
 $NEW --input sweep_mono_6s.wav --output ft/tr50.wav --circuit "$DLX" --params "Volume=1,Treble=1,Bass=1" --speaker S_OUT --oversample 16 --iterations 256 --trust-region 50 2>&1 >/dev/null | grep -E "iverge|^newton:" | cut -c1-200
+echo "== T6 line search: the failing Deluxe clip is fixed, a healthy circuit is bit-identical"
+$NEW --input sweep_1p4s.wav --output ft/ls_ctl.wav --circuit "$DLX" --params "Volume=1,Treble=1,Bass=1" --speaker S_OUT --oversample 16 --iterations 256 2>&1 >/dev/null | grep -E "^newton:" | sed 's/^/   control      : /' | cut -c1-170
+$NEW --input sweep_1p4s.wav --output ft/ls_on.wav --circuit "$DLX" --params "Volume=1,Treble=1,Bass=1" --speaker S_OUT --oversample 16 --iterations 256 --line-search 8 2>&1 >/dev/null | grep -E "^newton:" | sed 's/^/   --line-search 8: /' | cut -c1-170
+echo "   (expected: control unconverged>0 and severe>0, peak 44 V; line search 0 and 0, peak 27.45 V)"
+$NEW --input bc/in_bc.wav --output ft/ls_h0.wav --circuit "$DSAC" --params "Volume=1,Treble=1,Bass=1" --speaker S_OUT --oversample 8 --iterations 256 >/dev/null 2>&1 &
+$NEW --input bc/in_bc.wav --output ft/ls_h1.wav --circuit "$DSAC" --params "Volume=1,Treble=1,Bass=1" --speaker S_OUT --oversample 8 --iterations 256 --line-search 8 >/dev/null 2>&1 &
+wait
+cmp -s ft/ls_h0.wav ft/ls_h1.wav && echo "   healthy Deluxe sag ac with and without --line-search: identical" || echo "   healthy Deluxe sag ac: DIFFERENT (regression)"

@@ -14,6 +14,8 @@ namespace livespice_cli
         // Newton diagnostics options (see Simulation.Stats): parsed from the command line, applied in Render.
         static int TraceNewton = 0;
         static double TrustRegionV = 0.0;
+        static int LineSearchN = 0, LineSearchAfterN = 20;
+        static double LineSearchSlackX = 0.1;
         static string TapNode = null;
         static double MagnitudeLimitV = -1;   // < 0: keep the Simulation default (1e6 V); 0 disables the magnitude check
 
@@ -43,6 +45,10 @@ namespace livespice_cli
                     case "--trust-region": TrustRegionV = double.Parse(args[++i], System.Globalization.CultureInfo.InvariantCulture); break;
                     // Render the voltage of an internal node (by net name) instead of a Speaker.
                     case "--tap": TapNode = args[++i]; break;
+                    // Residual-monitored backtracking for solves that are not converging: up to N step halvings. Default off.
+                    case "--line-search": LineSearchN = int.Parse(args[++i]); break;
+                    case "--line-search-after": LineSearchAfterN = int.Parse(args[++i]); break;
+                    case "--line-search-slack": LineSearchSlackX = double.Parse(args[++i], System.Globalization.CultureInfo.InvariantCulture); break;
                     // Finite output magnitude (volts) treated as divergence. Default 1e6; 0 disables (the old behaviour).
                     case "--magnitude-limit": MagnitudeLimitV = double.Parse(args[++i], System.Globalization.CultureInfo.InvariantCulture); break;
                     // Dump the authoritative netlist (components + node connectivity) as JSON
@@ -313,6 +319,9 @@ namespace livespice_cli
                 Output = new[] { outputExpr },
                 TraceNewton = TraceNewton,
                 TrustRegion = TrustRegionV,
+                LineSearch = LineSearchN,
+                LineSearchAfter = LineSearchAfterN,
+                LineSearchSlack = LineSearchSlackX,
             };
             if (MagnitudeLimitV >= 0) sim.MagnitudeLimit = MagnitudeLimitV;
 
