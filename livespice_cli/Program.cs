@@ -11,6 +11,12 @@ namespace livespice_cli
 {
     class Program
     {
+        // Newton diagnostics options (see Simulation.Stats): parsed from the command line, applied in Render.
+        static int TraceNewton = 0;
+        static double TrustRegionV = 0.0;
+        static string TapNode = null;
+        static double MagnitudeLimitV = -1;   // < 0: keep the Simulation default (1e6 V); 0 disables the magnitude check
+
         static void Main(string[] args)
         {
             string inputPath = null, outputPath = null, circuitPath = null, paramsStr = null, speakerName = null;
@@ -31,6 +37,14 @@ namespace livespice_cli
                     case "--sr": sampleRate = int.Parse(args[++i]); break;
                     case "--oversample": oversample = int.Parse(args[++i]); break;
                     case "--iterations": iterations = int.Parse(args[++i]); break;
+                    // Keep per-iteration trajectories of the first N unconverged Newton solves and print them (slows the solve).
+                    case "--trace-newton": TraceNewton = int.Parse(args[++i]); break;
+                    // EXPERIMENTAL: scale the whole Newton step when its norm exceeds this many volts. Default off.
+                    case "--trust-region": TrustRegionV = double.Parse(args[++i], System.Globalization.CultureInfo.InvariantCulture); break;
+                    // Render the voltage of an internal node (by net name) instead of a Speaker.
+                    case "--tap": TapNode = args[++i]; break;
+                    // Finite output magnitude (volts) treated as divergence. Default 1e6; 0 disables (the old behaviour).
+                    case "--magnitude-limit": MagnitudeLimitV = double.Parse(args[++i], System.Globalization.CultureInfo.InvariantCulture); break;
                     // Dump the authoritative netlist (components + node connectivity) as JSON
                     // and exit — the foundation for the ngspice-backend .schx translator.
                     case "--netlist": netlistPath = args[++i]; break;
@@ -118,7 +132,7 @@ namespace livespice_cli
             Expression outputExpr;
             try
             {
-                outputExpr = ResolveOutput(circuit, speakerName);
+                outputExpr = ResolveOutput(circuit, speakerName, TapNode);
             }
             catch (ArgumentException e)
             {
@@ -238,8 +252,15 @@ namespace livespice_cli
             }
         }
 
-        static Expression ResolveOutput(Circuit.Circuit circuit, string speakerName)
+        static Expression ResolveOutput(Circuit.Circuit circuit, string speakerName, string tap = null)
         {
+            if (tap != null)
+            {
+                var node = circuit.Nodes.FirstOrDefault(nd => nd.Name == tap);
+                if (node == null)
+                    throw new ArgumentException($"Node '{tap}' not found. Available: {string.Join(", ", circuit.Nodes.Select(nd => nd.Name))}");
+                return node.V;
+            }
             var allSpeakers = circuit.Components.OfType<Speaker>().ToList();
             List<Speaker> speakers;
             if (speakerName != null)
@@ -290,7 +311,10 @@ namespace livespice_cli
                 Iterations = iterations,
                 Input = new[] { inputExpr },
                 Output = new[] { outputExpr },
+                TraceNewton = TraceNewton,
+                TrustRegion = TrustRegionV,
             };
+            if (MagnitudeLimitV >= 0) sim.MagnitudeLimit = MagnitudeLimitV;
 
             // process in chunks
             int N = inSamples.Length;
@@ -309,6 +333,8 @@ namespace livespice_cli
             // ~1400 chunks, and one line each would be noise.
             var swProg = System.Diagnostics.Stopwatch.StartNew();
             long lastMs = -1000;
+            try
+            {
             while (offset < N)
             {
                 int n = Math.Min(chunk, N - offset);
@@ -324,6 +350,13 @@ namespace livespice_cli
                     Console.Error.WriteLine($"PROGRESS {offset}/{N}");
                     Console.Error.Flush();
                 }
+            }
+            }
+            finally
+            {
+                // Always report Newton health, including when the render diverged.
+                Console.Error.WriteLine(sim.Stats.Summary());
+                foreach (var line in sim.Stats.TraceLines()) Console.Error.WriteLine(line);
             }
             return outputBuffer;
         }
@@ -389,7 +422,7 @@ namespace livespice_cli
 
                     var circuit = schematic.Build(log);
                     ApplyParams(circuit, prms);
-                    var outputExpr = ResolveOutput(circuit, speaker);
+                    var outputExpr = ResolveOutput(circuit, speaker, GetStr("tap", TapNode));
                     var buf = Render(circuit, outputExpr, wav.samples, outSampleRate, os, iters, log);
                     WriteWavFloat(output, buf, outSampleRate);
                     Console.Out.WriteLine($"JOB {idx} OK {output}");
